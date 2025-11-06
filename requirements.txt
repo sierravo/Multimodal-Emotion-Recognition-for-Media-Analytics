@@ -1,0 +1,7 @@
+numpy
+pandas
+scikit-learn
+xgboost
+opencv-python
+beautifulsoup4
+requests

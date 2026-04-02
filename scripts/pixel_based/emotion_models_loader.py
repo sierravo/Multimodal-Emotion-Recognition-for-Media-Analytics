@@ -2,7 +2,7 @@ import torch
 from torchvision import transforms
 from SongFan import EMO6Classifier
 from AffectNet import EmotionClassifier
-from image_utils import ANRescale, ANToTensor, SFNormalize, SFRescale, SFToTensor
+from transforms import ANRescale, ANToTensor, SFNormalize, SFRescale, SFToTensor
 
 
 def load_affectnet_model(checkpoint_path):

@@ -1,108 +1,83 @@
 import os
-import torch
-import tensorflow as tf
 import pandas as pd
 import matplotlib.pyplot as plt
 from skimage import transform
 
-from transforms import ANRescale, ANToTensor, SFNormalize, SFRescale, SFToTensor
-from AffectNet import EmotionClassifier
-from SongFan import EMO6Classifier
+from bregnext_model_loader import load_bregnext_model
+from emotion_models_loader import load_affectnet_model, load_songfan_model
+
 
 class ModelRunner:
     """
-    Handles loading and inference for BReG-NeXt (TensorFlow), AffectNet (PyTorch),
-    and SongFan (PyTorch) emotion classification models.
+    Handles inference for BReG-NeXt, AffectNet, and SongFan models.
     """
 
-    def __init__(self, bregnext_ckpt, affectnet_ckpt, songfan_ckpt, device='cpu', example_dir='examples'):
-        """
-        Load all models and set up transforms.
-
-        Args:
-            bregnext_ckpt (str): Path to BReG-NeXt checkpoint directory.
-            affectnet_ckpt (str): Path to AffectNet checkpoint file.
-            songfan_ckpt (str): Path to SongFan checkpoint file.
-            device (str): 'cpu' or 'cuda'.
-            example_dir (str): Directory for saving example outputs.
-        """
-        self.device = device
+    def __init__(
+        self,
+        bregnext_ckpt,
+        affectnet_ckpt,
+        songfan_ckpt,
+        example_dir="examples",
+    ):
         self.example_dir = example_dir
         os.makedirs(self.example_dir, exist_ok=True)
 
-        # Load BReG-NeXt TensorFlow model
-        self.sess = tf.compat.v1.Session()
-        saver = tf.compat.v1.train.import_meta_graph(os.path.join(bregnext_ckpt, 'checkpoints-4300.meta'))
-        saver.restore(self.sess, tf.compat.v1.train.latest_checkpoint(bregnext_ckpt))
-        graph = tf.compat.v1.get_default_graph()
-        self.bregnext_input = graph.get_operation_by_name('image_batch_placeholder').outputs[0]
-        self.bregnext_predictions = graph.get_operation_by_name('FullyConnected/BiasAdd').outputs[0]
-
-        # Load AffectNet PyTorch model
-        self.affectnet = EmotionClassifier()
-        self.affectnet.load(affectnet_ckpt)
-        self.affectnet.eval()
-        self.affectnet_transform = torch.nn.Sequential(
-            ANRescale(),
-            ANToTensor()
+        # Load models
+        self.sess, self.bregnext_input, self.bregnext_predictions = load_bregnext_model(
+            bregnext_ckpt
         )
-
-        # Load SongFan PyTorch model
-        self.songfan = EMO6Classifier(pretrained=True, path_to_checkpoint=songfan_ckpt)
-        self.songfan.eval()
-        self.songfan_transform = torch.nn.Sequential(
-            SFNormalize(mean=[0.485, 0.456, 0.406],
-                        std=[0.229, 0.224, 0.225]),
-            SFRescale(),
-            SFToTensor()
+        self.affectnet_model, self.affectnet_transform = load_affectnet_model(
+            affectnet_ckpt
+        )
+        self.songfan_model, self.songfan_transform = load_songfan_model(
+            songfan_ckpt
         )
 
     def run_bregnext(self, face_imgs):
-        """
-        Run BReG-NeXt inference on cropped face images.
-
-        Args:
-            face_imgs (np.ndarray): Batch of cropped face images.
-
-        Returns:
-            pd.DataFrame: Prediction probabilities for emotion classes.
-        """
+        labels = [
+            "Neutral", "Happy", "Sad", "Surprise",
+            "Fear", "Disgust", "Anger", "Contempt"
+        ]
         feed_dict = {self.bregnext_input: face_imgs}
         pred_prob = self.sess.run(self.bregnext_predictions, feed_dict)
-        labels = ['Neutral', 'Happy', 'Sad', 'Surprise', 'Fear', 'Disgust', 'Anger', 'Contempt']
         return pd.DataFrame(pred_prob, columns=labels)
 
     def run_affectnet(self, face_imgs):
-        """
-        Run AffectNet inference on cropped face images.
+        labels = [
+            "Neutral", "Happy", "Sad", "Surprise",
+            "Fear", "Disgust", "Anger", "Contempt",
+            "None", "Uncertain", "No-Face"
+        ]
 
-        Args:
-            face_imgs (np.ndarray): Batch of cropped face images.
+        transformed_imgs = [self.affectnet_transform(face_img) for face_img in face_imgs]
+        pred_label, pred_val = self.affectnet_model(transformed_imgs)
+        results = pd.DataFrame(pred_label.detach().numpy(), columns=labels)
+        return results, pred_val
 
-        Returns:
-            pd.DataFrame: Prediction scores for emotion classes.
-        """
-        transformed_imgs = torch.stack([self.affectnet_transform(f) for f in face_imgs])
-        pred_label, pred_val = self.affectnet(transformed_imgs)
-        labels = ['Neutral', 'Happy', 'Sad', 'Surprise', 'Fear', 'Disgust', 'Anger', 'Contempt', 'None', 'Uncertain', 'No-Face']
-        return pd.DataFrame(pred_label.detach().numpy(), columns=labels), pred_val
+    def run_songfan(self, new_img, i):
+        songfan_input = self.songfan_transform(new_img)
+        pred, attention_map, salience_map = self.songfan_model(
+            songfan_input[0][None],
+            songfan_input[1][None]
+        )
 
-    def run_songfan(self, img):
-        """
-        Run SongFan inference on a full image.
-
-        Args:
-            img (np.ndarray): Full RGB image.
-
-        Returns:
-            pd.DataFrame: Prediction scores for emotions.
-            np.ndarray: Attention map.
-            np.ndarray: Salience map.
-        """
-        transformed_img = self.songfan_transform(img)
-        pred, attention_map, salience_map = self.songfan(transformed_img[0][None], transformed_img[1][None])
-        labels = ['anger', 'disgust', 'fear', 'joy', 'sadness', 'surprise', 'neutral']
+        labels = ["anger", "disgust", "fear", "joy", "sadness", "surprise", "neutral"]
         results = pd.DataFrame(pred[:, 2:].detach().numpy(), columns=labels)
 
         amap = transform.resize(attention_map.detach().numpy()[0, 0], (600, 800))
-        smap = transform.resize(s
+        plt.imsave(os.path.join(self.example_dir, f"fig{i}_attention.png"), amap)
+
+        smap = transform.resize(salience_map.detach().numpy()[0, 0], (600, 800))
+        plt.imsave(os.path.join(self.example_dir, f"fig{i}_salience.png"), smap)
+
+        plt.close("all")
+        return results, pred[:, :2]
+
+    def run_all(self, new_img, img_faces, i):
+        results = {}
+
+        results["bregnext"] = self.run_bregnext(img_faces)
+        results["affectnet"], results["affectnet_meta"] = self.run_affectnet(img_faces)
+        results["songfan"], results["songfan_meta"] = self.run_songfan(new_img, i)
+
+        return results

@@ -1,9 +1,9 @@
 import os
 import numpy as np
 import cv2
+import random
 from mtcnn import MTCNN
 from skimage import io, transform
-from glob import glob
 
 class DataLoader:
     """
@@ -17,10 +17,39 @@ class DataLoader:
             images_path (str): Path to directory containing images (*.jpg).
             save_examples_dir (str): Directory to save example images.
         """
-        self.images = glob(images_path + '*.jpg')
+        if not os.path.isdir(images_path):
+            raise ValueError(f"Invalid image directory: {images_path}")
+
+        self.images_path = images_path
+        self.save_examples_dir = save_examples_dir
+
+            
+        self.images = [
+            os.path.join(images_path, f)
+            for f in os.listdir(images_path)
+            if f.lower().endswith((".jpg", ".png", ".jpeg"))
+        ]
+
+        if not self.images:
+            raise ValueError(f"No valid images found in: {image_path}")
+
         self.detector = MTCNN()
         self.save_dir = save_examples_dir
         os.makedirs(self.save_dir, exist_ok=True)
+
+
+    def load_image(self, img_path):
+        if not os.path.isfile(img_path):
+            raise FileNotFoundError(f"Image file not found: {img_path}")
+
+        img = cv2.imread(img_path)
+        if img is None:
+            raise ValueError(f"Could not read image: {img_path}")
+
+        if len(img.shape) != 3 or img.shape[2] != 3:
+            raise ValueError(f"Expected 3-channel image, got shape {img.shape} for {img_path}")
+
+        return img
 
     def get_new_image(self, n, img_path=None):
         """
@@ -35,7 +64,7 @@ class DataLoader:
             np.ndarray: RGB image array.
         """
         if img_path:
-            img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+            img = cv2.cvtColor(self.load_image(img_path), cv2.COLOR_BGR2RGB)
             face_locations = self.detector.detect_faces(img)
             print(f"{img_path}: {len(face_locations)} faces detected")
             io.imsave(os.path.join(self.save_dir, f'fig{n}_full.png'), img)
@@ -43,12 +72,54 @@ class DataLoader:
 
         while True:
             rand_img_path = np.random.choice(self.images)
-            img = cv2.cvtColor(cv2.imread(rand_img_path), cv2.COLOR_BGR2RGB)
+            img = cv2.cvtColor(self.load_image(rand_img_path), cv2.COLOR_BGR2RGB)
             face_locations = self.detector.detect_faces(img)
             if len(face_locations) > 0:
                 print(f"{rand_img_path}: {len(face_locations)} faces detected")
                 io.imsave(os.path.join(self.save_dir, f'fig{n}_full.png'), img)
                 return img
+
+
+    def get_new_image(self, idx=None, img_path=None, max_attempts=20):
+        if not self.images:
+            raise ValueError("No images available in DataLoader")
+
+        attempts = 0
+        tried_paths = set()
+
+        while attempts < max_attempts:
+            attempts += 1
+
+            # choose input path
+            if img_path is not None and attempts == 1:
+                candidate = img_path
+            elif idx is not None and attempts == 1:
+                candidate = self.images[idx]
+            else:
+                candidate = random.choice(self.images)
+
+            if candidate in tried_paths:
+                continue
+            tried_paths.add(candidate)
+
+            try:
+                img = self.load_image(candidate)
+                rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+                # if you do face detection here, validate result
+                boxes, _ = self.mtcnn.detect(rgb_img)
+                if boxes is None or len(boxes) == 0:
+                    continue
+
+                return rgb_img
+
+            except Exception as e:
+                print(f"[!] Skipping image {candidate}: {e}")
+                continue
+
+        raise RuntimeError(
+            f"Could not find a usable image with detectable face after {max_attempts} attempts"
+        )
 
     def find_faces(self, n, img):
         """
@@ -61,7 +132,14 @@ class DataLoader:
         Returns:
             np.ndarray: Array of resized face images (N, 64, 64, 3).
         """
+        if img is None:
+            return []
+
         face_locations = self.detector.detect_faces(img)
+
+        if face_locations is None:
+            return []
+
         img_height, img_width, _ = img.shape
         image_faces = []
 

@@ -4,7 +4,8 @@ from rate_limiter import rate_limit
 from config import BASE_URL_TEMPLATE
 import logging
 
-def get_archive_data(month: int, year: int, current_queries: int):
+
+def get_archive_data(session, month, year, current_queries):
     """
     Request archive data for a given month and year from NYT API.
 
@@ -18,11 +19,15 @@ def get_archive_data(month: int, year: int, current_queries: int):
     """
     url = BASE_URL_TEMPLATE.format(year=year, month=month)
     current_queries = rate_limit(current_queries)
+
     logging.info(f"Requesting archive data for {month}/{year}...")
-    response = requests.get(url)
+    response = session.get(url)
     response.raise_for_status()
+    current_queries += 1
+
     data = response.json()
     docs = data['response']['docs']
+    
     df = pd.DataFrame(docs)
     df['pub_date'] = pd.to_datetime(df['pub_date']).dt.date
     df['main_headline'] = df['headline'].apply(lambda h: h.get('main', '').lower())

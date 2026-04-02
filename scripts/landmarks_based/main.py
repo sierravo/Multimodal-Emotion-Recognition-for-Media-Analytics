@@ -1,39 +1,101 @@
 import os
+import argparse
+
 from data_loader import load_features
 from models import get_classifiers
 from train import run_classifiers
 from utils import save_model
 
-FEATURES_DIR = "/content/drive/MyDrive/Media_2020-1/facial landmark code/New Landmark Code/affectnet_balanced_processed"
-INTER_DIST_PATH = os.path.join(FEATURES_DIR, "inter_dist.csv")
-CENTER_DIST_PATH = os.path.join(FEATURES_DIR, "center_dist.csv")
-CRAFTED_PATH = os.path.join(FEATURES_DIR, "new_features.csv")
+
+DEFAULT_FEATURE_FILES = {
+    "Crafted Features": "new_features.csv",
+    # Uncomment only if you are actually keeping these feature sets
+    # "Inter Distance Features": "inter_dist.csv",
+    # "Center Distance Features": "center_dist.csv",
+}
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Train and compare landmark-based emotion classifiers."
+    )
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        default=None,
+        help="Directory containing processed feature CSV files. Defaults to <repo>/data"
+    )
+    parser.add_argument(
+        "--feature_files",
+        nargs="*",
+        default=None,
+        help=(
+            "Optional list of feature CSV filenames to use, e.g. "
+            "--feature_files new_features.csv inter_dist.csv"
+        )
+    )
+    return parser.parse_args()
+
+
+def resolve_repo_root():
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def resolve_data_dir(user_data_dir=None):
+    if user_data_dir:
+        return user_data_dir
+    repo_root = resolve_repo_root()
+    return os.path.join(repo_root, "data")
+
+
+def build_feature_map(feature_files):
+    if feature_files:
+        return {
+            os.path.splitext(os.path.basename(fname))[0].replace("_", " ").title(): fname
+            for fname in feature_files
+        }
+    return DEFAULT_FEATURE_FILES
+
 
 def main():
-    # Load data
-    df_inter = load_features(INTER_DIST_PATH)
-    df_center = load_features(CENTER_DIST_PATH)
-    df_crafted = load_features(CRAFTED_PATH)
+    args = parse_args()
+    data_dir = resolve_data_dir(args.data_dir)
+    feature_map = build_feature_map(args.feature_files)
+
+    if not os.path.isdir(data_dir):
+        raise FileNotFoundError(
+            f"Data directory not found: {data_dir}\n"
+            "Create the directory and place your processed CSV feature files there."
+        )
 
     classifiers = get_classifiers()
-
     all_results = []
 
-    print("\n=== Inter Distance Features ===")
-    all_results += run_classifiers(df_inter, "Inter Distance", classifiers)
+    for dataset_name, filename in feature_map.items():
+        file_path = os.path.join(data_dir, filename)
 
-    print("\n=== Center Distance Features ===")
-    all_results += run_classifiers(df_center, "Center Distance", classifiers)
+        if not os.path.exists(file_path):
+            print(f"Skipping {dataset_name}: file not found at {file_path}")
+            continue
 
-    print("\n=== Crafted Features ===")
-    all_results += run_classifiers(df_crafted, "Crafted Features", classifiers)
+        print(f"\n=== {dataset_name} ===")
+        df = load_features(file_path)
+        all_results += run_classifiers(df, dataset_name, classifiers)
 
-    # Find best model
+    if not all_results:
+        raise ValueError(
+            "No feature files were loaded. Check your data directory and filenames."
+        )
+
     best = max(all_results, key=lambda x: x[1])
-    best_name, best_acc, best_dataset, best_model = best
+    best_name, best_score, best_dataset, best_model = best
 
-    print(f"\nBest Model: {best_name} on {best_dataset} features with Accuracy: {best_acc:.4f}")
+    print(
+        f"\nBest Model: {best_name} on {best_dataset} "
+        f"with Macro F1: {best_score:.4f}"
+    )
     save_model(best_model, best_name, best_dataset)
+
 
 if __name__ == "__main__":
     main()

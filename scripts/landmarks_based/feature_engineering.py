@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-from landmark_utils import get_angle, get_distance, parse_landmarks, LANDMARK_COUNT
+import os
+from landmark_utils import get_angle, get_distance, LANDMARK_COUNT
 
 # Angle and distance index tuples for feature extraction (same as your original)
 ANGLES = [
@@ -50,4 +51,28 @@ def compute_center_distances(landmarks):
         list: Distances.
     """
     center = np.array(landmarks[33])
-    return [np.linalg.norm(np.array(pt) -
+    return [np.linalg.norm(np.array(landmarks[pt]) - center)
+            for i, pt in enumerate(landmarks) if i != 33]
+
+
+def create_features(point_coord):
+    features = [get_angle(point_coord[i], point_coord[j], point_coord[k]) for (i, j, k) in ANGLES]
+    features += [get_distance(point_coord[i], point_coord[j]) for (i, j) in DISTANCES]
+    return features
+
+def process_data(data, base_img_path):
+    n = data.shape[0]
+    features = np.zeros((n, 55))  # Adjust feature count accordingly
+    paths = []
+
+    for idx in range(n):
+        row = data.iloc[idx]
+        landmarks = [float(v) for v in row['facial_landmarks_new'].split(';')]
+        point_coord = [(landmarks[i*2], landmarks[i*2+1]) for i in range(LANDMARK_COUNT)]
+        features[idx] = create_features(point_coord)
+        paths.append(os.path.join(base_img_path, row['img_path']))
+
+    df_features = pd.DataFrame(features)
+    df_features['img_path'] = paths
+    return df_features
+

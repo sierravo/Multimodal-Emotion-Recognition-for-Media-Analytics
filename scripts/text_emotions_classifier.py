@@ -1,23 +1,39 @@
 import pandas as pd
+import argparse 
 import torch
 import numpy as np
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-# ======= PATHS ========
-input_csv = "..."  # replace with your_input_articles
-output_csv = "..." # replace with articles_with_vad_emotions
-
 # ====== Load pretrained VAD model =======
 MODEL_NAME = "bhadresh-savani/bert-base-uncased-emotion-vader"  # Replace if needed
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+EMOTION_LABELS = {
+    0: "Neutral",
+    1: "Happy",
+    2: "Sad",
+    3: "Surprise",
+    4: "Fear",
+    5: "Disgust",
+    6: "Anger",
+    7: "Contempt"
+}
 
-def predict_vad(text):
+def load_model(model_name=MODEL_NAME):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    model.eval()
+    return tokenizer, model, device
+
+def predict_vad_batch(text, tokenizer, model, device):
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+    inputs = {k: v.to(device) for k, v in inputs.items()}    
+
     with torch.no_grad():
         outputs = model(**inputs)
-    vad = outputs.logits.squeeze().cpu().numpy()
+
+    vad = outputs.logits.detach().cpu().numpy()
     vad = np.clip(vad, 0, 1)
     return vad  # [Valence, Arousal, Dominance]
 
@@ -42,49 +58,71 @@ def vad_to_emotion_category(vad):
         return 7  # Contempt
     return 0
 
-EMOTION_LABELS = {
-    0: "Neutral",
-    1: "Happy",
-    2: "Sad",
-    3: "Surprise",
-    4: "Fear",
-    5: "Disgust",
-    6: "Anger",
-    7: "Contempt"
-}
+def process_csv(input_csv_path, output_csv_path, text_column="article_text", name_column = "article_name", batch_size=16):
+    tokenizer, model, device = load_model()
 
-def analyze_text(text):
-    vad = predict_vad(text)
-    category = vad_to_emotion_category(vad)
-    return vad, category
-
-def process_csv(input_csv_path, output_csv_path):
     df = pd.read_csv(input_csv_path)
 
-    valences = []
-    arousals = []
-    dominances = []
-    categories = []
-    category_names = []
+    if text_column not in df.columns:
+        raise ValueError(
+            f"Missing required text column: '{text_column}'. "
+            f"Available columns: {list(df.columns)}"
+        )
 
-    for idx, row in df.iterrows():
-        text = row['article_text']
-        vad, cat = analyze_text(text)
-        valences.append(vad[0])
-        arousals.append(vad[1])
-        dominances.append(vad[2])
-        categories.append(cat)
-        category_names.append(EMOTION_LABELS[cat])
-        print(f"Processed article {idx+1}/{len(df)}: {row['article_name']} -> {EMOTION_LABELS[cat]}")
+    texts = df[text_column].fillna("").astype(str).tolist()
+    names = df[name_column]
 
-    df['valence'] = valences
-    df['arousal'] = arousals
-    df['dominance'] = dominances
-    df['emotion_category_id'] = categories
-    df['emotion_category_name'] = category_names
+    all_vad = []
 
-    df.to_csv(output_csv_path, index=False)
-    print(f"Results saved to {output_csv_path}")
+    for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i:i + batch_size]
+
+        vad_batch = predict_vad_batch(batch_texts, tokenizer, model, device)
+        all_vad.extend(vad_batch)
+
+        print(f"Processed batch {i // batch_size + 1}")
+
+    all_vad = np.array(all_vad)
+
+    valence = all_vad[:, 0]
+    arousal = all_vad[:, 1]
+    dominance = all_vad[:, 2]
+
+    categories = [vad_to_emotion_category(v) for v in all_vad]
+    category_names = [EMOTION_LABELS[c] for c in categories]
+
+    result_df = df.copy()
+
+    result_df["valence"] = valence
+    result_df["arousal"] = arousal
+    result_df["dominance"] = dominance
+    result_df["emotion_category_id"] = categories
+    result_df["emotion_category_name"] = category_names
+
+    result_df.to_csv(output_csv_path, index=False)
+    print(f"Saved to {output_csv_path}")
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Classify article text into emotion categories using VAD scores."
+    )
+    parser.add_argument("--input_csv", required=True, help="Path to input CSV")
+    parser.add_argument("--output_csv", required=True, help="Path to output CSV")
+    parser.add_argument("--text_column", default="article_text", help="Name of text column")
+    parser.add_argument("--name_column", default="article_name", help="Optional name/title column")
+    parser.add_argument("--batch_size", type=int, default=16)
+    return parser.parse_args()
+
+def main():
+    args = parse_args()
+    process_csv(
+        input_csv_path=args.input_csv,
+        output_csv_path=args.output_csv,
+        text_column=args.text_column,
+        name_column=args.name_column,
+        batch_size=args.batch_size
+    )
+
 
 if __name__ == "__main__":
-    process_csv(input_csv, output_csv)
+    main()

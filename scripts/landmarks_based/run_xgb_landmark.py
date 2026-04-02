@@ -1,14 +1,9 @@
 import pandas as pd
 import joblib
 import os
+import argparse
 
-# ==== CONFIG ====
-
-MODEL_PATH = "/content/..."  # <-- Path to trained model
-NEW_DATASET_PATH = "/content/..."  # <-- Path to new image feature data
-OUTPUT_CSV_PATH = "/content/..." # <--- Path to prediction output file
-
-# AffectNet label mapping (optional, for readability)
+# AffectNet label mapping
 affectnet_labels = {
     0: 'Neutral',
     1: 'Happy',
@@ -20,35 +15,60 @@ affectnet_labels = {
     7: 'Contempt'
 }
 
-# ==== LOAD MODEL ====
 
-print(f"Loading model from: {MODEL_PATH}")
-model = joblib.load(MODEL_PATH)
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run XGBoost model on new data")
+    parser.add_argument("--model_path", type=str, required=True, help="Path to trained model (.joblib)")
+    parser.add_argument("--data_path", type=str, required=True, help="Path to new dataset CSV")
+    parser.add_argument("--output_path", type=str, default="outputs/xgb_predictions.csv", help="Path to save predictions")
+    return parser.parse_args()
 
-# ==== LOAD NEW DATA ====
 
-print(f"Loading new dataset from: {NEW_DATASET_PATH}")
-df_new = pd.read_csv(NEW_DATASET_PATH)
+def main():
+    args = parse_args()
 
-# If dataset has labels (e.g., first column), drop them for prediction
-if df_new.columns[0].lower() in ['label', 'emotion', 'class']:
-    X_new = df_new.iloc[:, 1:]
-else:
-    X_new = df_new
+    model_path = args.model_path
+    data_path = args.data_path
+    output_path = args.output_path
 
-# ==== PREDICT ====
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-print("Predicting labels and probabilities...")
-y_pred = model.predict(X_new)
-y_proba = model.predict_proba(X_new)
+    # ==== LOAD MODEL ====
+    print(f"Loading model from: {model_path}")
+    model = joblib.load(model_path)
 
-# ==== OUTPUT ====
+    # ==== LOAD NEW DATA ====
+    print(f"Loading new dataset from: {data_path}")
+    df_new = pd.read_csv(data_path)
 
-# Prepare DataFrame
-df_output = pd.DataFrame(y_proba, columns=[f"prob_{affectnet_labels[i]}" for i in range(len(affectnet_labels))])
-df_output.insert(0, "predicted_label", y_pred)
-df_output.insert(1, "predicted_emotion", [affectnet_labels[label] for label in y_pred])
+    # Drop label column if present
+    if df_new.columns[0].lower() in ['label', 'emotion', 'class']:
+        X_new = df_new.iloc[:, 1:]
+    else:
+        X_new = df_new
 
-# Save to CSV
-df_output.to_csv(OUTPUT_CSV_PATH, index=False)
-print(f"Predictions saved to: {OUTPUT_CSV_PATH}")
+    # ==== PREDICT ====
+    print("Predicting labels and probabilities...")
+    y_pred = model.predict(X_new)
+
+    if hasattr(model, "predict_proba"):
+        y_proba = model.predict_proba(X_new)
+    else:
+        raise ValueError("Model does not support probability predictions")
+
+    # ==== OUTPUT ====
+    df_output = pd.DataFrame(
+        y_proba,
+        columns=[f"prob_{affectnet_labels[i]}" for i in range(len(affectnet_labels))]
+    )
+
+    df_output.insert(0, "predicted_label", y_pred)
+    df_output.insert(1, "predicted_emotion", [affectnet_labels[label] for label in y_pred])
+
+    df_output.to_csv(output_path, index=False)
+    print(f"Predictions saved to: {output_path}")
+
+
+if __name__ == "__main__":
+    main()

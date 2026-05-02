@@ -1,0 +1,8 @@
+-r base.txt
+-r landmark.txt
+-r scraping.txt
+-r text.txt
+-r dev.txt
+
+# Pixel pipeline dependencies are intentionally not included here
+# because TensorFlow/PyTorch/checkpoint compatibility can be environment-specific.

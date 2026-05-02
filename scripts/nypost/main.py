@@ -35,8 +35,10 @@ def main() -> None:
         )
 
     all_links = []
-    print(f"Collecting links for {year}-{month}...")
-    for day in tqdm(range(1, get_day_range(year, month) + 1), desc="Fetching daily article links"):
+    print(f"Collecting links for {args.year}-{args.month}...")
+    for day in tqdm(range(1, get_day_range(args.year, args.month) + 1), ...):
+    links = get_nypost_links(session, args.year, args.month, date_str)
+
         date_str = f"{day:02}"
         links = get_nypost_links(session, year, month, date_str)
         all_links.extend(links)
@@ -82,11 +84,10 @@ def main() -> None:
             futures = [executor.submit(download_images, i, row) for i, row in df.iterrows()]
             for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading images"):
                 try:
-                    future.result()
+                    result = future.result()
+                    image_jobs.extend(result)
                 except Exception as e:
                     print(f"[!] Error downloading image: {e}")
-
-                image_jobs.extend(future.result())
 
         for headline, path in image_jobs:
             writer.writerow([headline, path])

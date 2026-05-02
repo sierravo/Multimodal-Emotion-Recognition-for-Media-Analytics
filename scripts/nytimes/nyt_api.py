@@ -5,7 +5,7 @@ from config import BASE_URL_TEMPLATE
 import logging
 
 
-def get_archive_data(session, month, year, current_queries):
+def get_archive_data(session, year, month, current_queries):
     """
     Request archive data for a given month and year from NYT API.
 

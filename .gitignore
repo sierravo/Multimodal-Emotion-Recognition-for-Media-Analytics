@@ -1,8 +1,7 @@
-data/
+__pycache__/
+.pytest_cache/
+*.pyc
 outputs/
 models/
-__pycache__/
-*.pyc
-.DS_Store
-venv/
-.env
+checkpoints/
+data/

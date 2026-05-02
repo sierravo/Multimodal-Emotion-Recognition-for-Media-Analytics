@@ -5,6 +5,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 from rate_limiter import rate_limit
+from src.nytimes.config import (MAX_QUERIES, QUERY_DELAY)
 
 
 def create_session():
@@ -37,7 +38,7 @@ def fetch_article_text(session, url, current_queries):
     Returns:
         tuple: (headline str or None, article text str or None, updated query count)
     """
-    current_queries = rate_limit(current_queries)
+    current_queries = rate_limit(current_queries, max_queries = MAX_QUERIES, query_delay = QUERY_DELAY)
     try:
         response = session.get(url, timeout = 20)
         response.raise_for_status()
@@ -86,7 +87,7 @@ def fetch_article_media(session, url, current_queries):
     Returns:
         tuple: (list of image response objects, list of captions, updated query count)
     """
-    current_queries = rate_limit(current_queries)
+    current_queries = rate_limit(current_queries, max_queries=MAX_QUERIES, query_delay=QUERY_DELAY)
 
     try:
         response = session.get(url, timeout = 20)
@@ -110,7 +111,7 @@ def fetch_article_media(session, url, current_queries):
         imgs = []
 
         for img_url in img_urls:
-            current_queries = rate_limit(current_queries)
+            current_queries = rate_limit(current_queries, max_queries=MAX_QUERIES, query_delay=QUERY_DELAY)
             img_resp = requests.get(img_url)
             imgs.append(img_resp)
         return imgs, captions, current_queries

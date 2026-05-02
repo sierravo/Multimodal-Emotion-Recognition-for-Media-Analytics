@@ -34,7 +34,7 @@ def combine_predictions(preds_dl, preds_xgb):
 
     # Final prediction labels (forced-choice)
     predicted_indices = np.argmax(softmax_probs, axis=1)
-    final_labels = [emotion_labels[idx] for idx in predicted_indices]
+    final_labels = [EMOTION_LABELS[idx] for idx in predicted_indices]
 
     return softmax_probs, final_labels
 
@@ -54,8 +54,12 @@ def main():
     preds_dl = pd.read_csv(args.dl_input)
 
     # Adjust this slice if your XGB output format changes
-    preds_xgb_values = preds_xgb.iloc[:, 2:].to_numpy()
-    preds_dl_values = preds_dl.to_numpy()
+    prob_cols = [c for c in preds_xgb.columns if c.startswith("prob_")]
+    preds_xgb_values = preds_xgb[prob_cols].to_numpy()
+
+    prob_cols = [c for c in preds_dl.columns if c.startswith("prob_")]
+    preds_dl_values = preds_dl[prob_cols].to_numpy()
+    
 
     softmax_probs, final_labels = combine_predictions(preds_dl_values, preds_xgb_values)
 

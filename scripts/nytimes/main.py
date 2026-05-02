@@ -55,8 +55,8 @@ def main():
     output_csv_path = os.path.join(args.output_dir, "nyt_articles.csv")
 
     # Parse dates
-    start = datetime.datetime.strptime(args.start_date, "%Y-%m-%d")
-    end = datetime.datetime.strptime(args.end_date, "%Y-%m-%d")
+    start = datetime.strptime(args.start_date, "%Y-%m-%d")
+    end = datetime.strptime(args.end_date, "%Y-%m-%d")
 
     all_results = []
 
@@ -67,16 +67,16 @@ def main():
 
         print(f"\nFetching archive for {year}-{month:02d}")
 
-        archive, current_queries = get_archive_data(
+        archive_df, current_queries = get_archive_data(
             session,
             year,
             month,
             current_queries
         )
 
-        docs = archive.get("response", {}).get("docs", [])
+        filtered_df = filter_articles(archive_df)
 
-        for article in docs:
+        for article in filtered_df.iterrows():
             url = article.get("web_url")
             if not url:
                 continue

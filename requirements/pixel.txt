@@ -1,0 +1,10 @@
+-r base.txt
+
+tensorflow==2.15.0
+torch
+torchvision
+opencv-python
+mtcnn
+scikit-image
+matplotlib
+Pillow

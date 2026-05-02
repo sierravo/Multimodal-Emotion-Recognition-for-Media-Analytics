@@ -6,7 +6,7 @@ BASE_URL = "https://nypost.com/YEAR/MONTH/DATE/"
 
 def get_nypost_links(session, year: str, month: str, day: str) -> list:
     """Fetch and return a list of article URLs from NYPost for the given date."""
-    url = BASE_URL.replace("YEAR", year).replace("MONTH", month).replace("DATE", day)
+    url = BASE_URL.replace("YEAR", str(year)).replace("MONTH", f"{int(month):02d}").replace("DATE", str(day))
     try:
         response = session.get(url, timeout = 20)
         response.raise_for_status()

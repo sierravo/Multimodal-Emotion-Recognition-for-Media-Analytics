@@ -31,7 +31,7 @@ class DataLoader:
         ]
 
         if not self.images:
-            raise ValueError(f"No valid images found in: {image_path}")
+            raise ValueError(f"No valid images found in: {images_path}")
 
         self.detector = MTCNN()
         self.save_dir = save_examples_dir
@@ -51,7 +51,8 @@ class DataLoader:
 
         return img
 
-    def get_new_image(self, n, img_path=None):
+
+    def get_new_image(self, idx=None, img_path=None, max_attempts=20):
         """
         Load an image either randomly from images_path or from a provided path.
         Save a copy of the loaded image with the index in save_dir.
@@ -63,24 +64,6 @@ class DataLoader:
         Returns:
             np.ndarray: RGB image array.
         """
-        if img_path:
-            img = cv2.cvtColor(self.load_image(img_path), cv2.COLOR_BGR2RGB)
-            face_locations = self.detector.detect_faces(img)
-            print(f"{img_path}: {len(face_locations)} faces detected")
-            io.imsave(os.path.join(self.save_dir, f'fig{n}_full.png'), img)
-            return img
-
-        while True:
-            rand_img_path = np.random.choice(self.images)
-            img = cv2.cvtColor(self.load_image(rand_img_path), cv2.COLOR_BGR2RGB)
-            face_locations = self.detector.detect_faces(img)
-            if len(face_locations) > 0:
-                print(f"{rand_img_path}: {len(face_locations)} faces detected")
-                io.imsave(os.path.join(self.save_dir, f'fig{n}_full.png'), img)
-                return img
-
-
-    def get_new_image(self, idx=None, img_path=None, max_attempts=20):
         if not self.images:
             raise ValueError("No images available in DataLoader")
 
@@ -107,7 +90,7 @@ class DataLoader:
                 rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
                 # if you do face detection here, validate result
-                boxes, _ = self.mtcnn.detect(rgb_img)
+                boxes, _ = self.detector.detect(rgb_img)
                 if boxes is None or len(boxes) == 0:
                     continue
 

@@ -1,222 +1,338 @@
-# Facial Emotion Recognition using BReG-NeXt and Facial Landmarks
+# Multimodal Emotion Recognition for Media Analytics
 
-This project builds a multi-modal facial emotion recognition system combining:
-- CNN-based image classification (BReG-NeXt)
-- Landmark-based feature modeling (XGBoost)
+This project is a business-facing data science reimplementation of a prior collaborative facial emotion recognition project. It explores how multiple data modalities — facial image pixels, facial landmarks, and article text — can be combined to estimate dominant emotional signals in media content.
 
-The goal is to compare and combine structured and unstructured approaches to improve emotion classification performance on AffectNet.
+The core machine learning task is 8-class emotion classification:
 
-This repository reimplements a prior collaborative project from scratch, with additional improvements including:
-- modular pipeline design
-- multi-modal aggregation
-- reproducible training scripts
+- Neutral
+- Happy
+- Sad
+- Surprise
+- Fear
+- Disgust
+- Anger
+- Contempt
 
-## Acknowledgement
+The project compares two facial emotion modeling approaches:
 
-This project builds on prior collaborative work. I acknowledge guidance and contributions from:
-- Dr. Siddhartha Dalal
-- Dr. Michael Lesk
-- Wesley Yuan
-- Vikki Sui
+1. **Pixel-based deep learning** using BReG-NeXt / CNN-style image classification.
+2. **Landmark-based machine learning** using engineered facial geometry features with XGBoost.
 
-## Key Features
-- Multi-modal emotion classification (image + landmarks + text)
-- Deep learning (BReG-NeXt) + classical ML (XGBoost)
-- End-to-end pipeline from data ingestion → prediction → aggregation
-- Modular architecture for experimentation
-
-## Results
-
-| Model                 | Accuracy |
-|-----------------------|----------|
-| BReG-NeXt (CNN)       | 59%      |
-| Landmark + XGBoost    | 57.9%    |
-| Combined (Softmax)    | 77%      |
-
-
-## Key Learnings
-- Deep learning vs. engineered features:
-  CNN models learn robust visual features directly from images, while landmark-based models depend on handcrafted geometry and are more sensitive to preprocessing.
-- Label noise impacts performance:
-  AffectNet contains ambiguous labels, which limits achievable accuracy regardless of model choice.
-- Feature representation differences:
-  Landmark features capture structure only, while pixel-based models capture both structure and texture, leading to stronger performance.
-- Multi-modal aggregation:
-  Combining outputs from different models improves prediction stability by leveraging complementary information.
-- Modular pipeline design:
-  Separating pipelines improves maintainability and enables independent experimentation.
-- Reproducibility constraints:
-  Large datasets and legacy dependencies (e.g., TensorFlow 1.x) complicate environment setup and replication.
-
-## Limitations
-- Dataset limitations:
-  AffectNet is imbalanced and contains subjective labels.
-- HTML parsing is brittle if the NY Times page structure changes.
-- Landmark model constraints:
-  Geometric features lack texture information, limiting performance.
-- Preprocessing dependency:
-  Errors in face detection or landmark extraction degrade results.
-- Legacy dependencies:
-  TensorFlow 1.x introduces compatibility issues.
-- Limited evaluation:
-  Evaluation is restricted to AffectNet with no cross-dataset validation.
-- No deployment:
-  The system is designed for offline use only.
-- Manual setup required:
-  Paths and data must be configured manually.
-
+It also includes article scraping and text-emotion scoring components to support a broader media analytics workflow.
 
 ---
 
-## Project Structure
+## Business Use Case
 
-- scripts/
-  - pixel_based/ → CNN models
-  - landmark_preprocessing/ → feature engineering + XGBoost
-  - nlp/ → text classification
-  - scraping/ → data collection
-- manuscript/ → research reference
+This project can support media, brand, marketing, and communications analytics workflows where teams want to understand emotional framing across article text and associated images.
 
-```
+Example business questions:
+
+- Are articles about a topic framed more often with fear, anger, sadness, happiness, or neutrality?
+- Do article images and article text communicate the same emotional signal?
+- Can multimodal signals help flag emotionally charged content for editorial, brand-safety, or campaign-analysis review?
+- Does combining image-based and landmark-based predictions improve classification reliability compared with either model alone?
+
+This project is **not intended to infer a person’s true internal emotional state**. It estimates observable facial-expression signals and text-based emotional signals from available data.
+
+---
+
+## Project Objective
+
+The goal is to compare and combine structured and unstructured approaches to emotion classification:
+
+| Modality            | Input                          | Method                                     |
+|---------------------|--------------------------------|--------------------------------------------|
+| Facial landmarks    | 68 facial landmark coordinates | Engineered distances/angles + XGBoost      |
+| Facial image pixels | Cropped facial images          | BReG-NeXt / CNN-based model                |
+| Article text        | News/article text              | Transformer/VAD-based text emotion scoring |
+| Ensemble            | Model probability outputs      | Softmax-style probability aggregation      |
+
+The main data science question is:
+
+> Can combining facial landmark features and pixel-based deep learning predictions improve emotion classification accuracy?
+
+The accompanying manuscript found that the two facial models made different errors, which made model aggregation useful.
+
+---
+
+## Results Summary
+
+The accompanying manuscript evaluated the facial emotion models on a balanced subset of manually annotated AffectNet images. After duplicate removal, the experiment used:
+
+- **16,854 training images**
+- **4,520 test images**
+- **8 emotion categories**
+- **12.5% random guessing baseline** for forced-choice classification
+
+| Model                    | Accuracy | F1 Score | Description                                                              |
+|--------------------------|---------:|---------:|--------------------------------------------------------------------------|
+| Random Guessing Baseline | 12.5%    | —        | 8-class forced-choice baseline                                           |
+| Landmark + XGBoost       | 58.1%    | 57.9%    | Uses 68 facial landmarks with engineered distance and angle features     |
+| Pixel-Based BReG-NeXt    | ~58%     | —        | CNN-based model using full facial image pixels                           |
+| Combined Meta-Classifier | 76.7%    | 76.8%    | Combines landmark and pixel-model probability outputs, then renormalizes |
+
+The combined classifier improved performance because the landmark and pixel models made different errors. The manuscript reports that the two models had only fair agreement, with Cohen’s kappa of **30.14%**, supporting the use of an ensemble/meta-classifier approach.
+
+**Important:** These metrics come from the accompanying manuscript. This repository reimplements and organizes the project pipelines. Full reproduction requires external datasets and model checkpoints that are not included in the repository.
+
+---
+
+## Key Findings
+
+### 1. Landmark and pixel models were complementary
+
+The landmark model and pixel-based model achieved similar standalone performance, but they were not making identical predictions. Their disagreement created an opportunity for aggregation.
+
+### 2. Softmax-style aggregation improved accuracy
+
+The combined model added the probability outputs from the landmark and pixel models and renormalized them into final probabilities. This improved reported test accuracy from approximately 58% to 76.7%.
+
+### 3. Confidence/entropy helped explain reliability
+
+The manuscript found that lower-entropy predictions were generally more reliable. This suggests that model confidence can help identify predictions that may require review.
+
+### 4. Landmark features are interpretable but limited
+
+Landmark features capture facial geometry, such as distances and angles between facial points. They are more interpretable than raw pixels, but they miss texture, lighting, and other visual information.
+
+### 5. Pixel models capture richer visual signals
+
+CNN-based models can use structure, texture, and pixel-level patterns, but they are less interpretable and require external checkpoints and more complex dependencies.
+
+---
+
+## My Contribution
+
+This repository is a reimplementation and cleanup of prior collaborative research work. My contribution focused on turning the original research-style code into a more organized, reviewable, and reproducible data science project.
+
+Specifically, I contributed:
+
+- Wrote the full New York Post scraping pipeline, including link extraction, article parsing, metadata collection, and image downloading.
+- Built the landmark-based modeling pipeline, including data loading, preprocessing structure, feature-file handling, classifier training, model comparison, prediction export, and saved-model utilities.
+- Reimplemented the landmark workflow around engineered facial features, excluding the original landmark-coordinate calculation logic itself.
+- Fixed runtime bugs across the codebase, including NYTimes scraper errors, mismatched function arguments, inconsistent date handling, data type mismatches, and exception-handling issues.
+- Rewrote and modularized the pixel-based model pipeline, including model loading, image preprocessing, face detection flow, and inference orchestration.
+- Rewrote the softmax aggregation logic used to combine landmark and pixel-model probability outputs.
+- Cleaned up README commands, file names, project structure, and external dependency documentation.
+- Added support for sample data and smoke tests so reviewers can validate the project structure without downloading the full AffectNet dataset or external model checkpoints.
+
+Prior collaborative work contributed to the original research framing, manuscript, model direction, and landmark-coordinate calculation approach.
+
+---
+
+## Repository Structure
+
+```text
 image-emotion-classification/
 ├── README.md
-├── requirements.txt
-├── .gitignore
-├── data/                             # Place dataset or processed dataset
-feature files here (not included)
-├── outputs/                          # Model predictions (generated)
-├── models/                           # Saved trained models (generated)
+├── requirements/
+│   ├── base.txt
+│   ├── landmark.txt
+│   ├── pixel.txt
+│   ├── scraping.txt
+│   ├── text.txt
+│   ├── dev.txt
+│   └── all.txt
+├── sample_data/
+│   ├── landmark_features_sample.csv
+│   ├── xgb_predictions_sample.csv
+│   └── bregnext_predictions_sample.csv
+├── tests/
+│   ├── test_softmax_aggregation.py
+│   ├── test_sample_data_schema.py
+│   └── test_imports.py
+├── data/                         # External dataset files; not included
+├── outputs/                      # Generated predictions/evaluation outputs
+├── models/                       # Generated trained models
 ├── scripts/
 │   ├── nypost/
-│   │   ├── scraper_utils.py          # Utilities for scraping
-│   │   ├── scraper_main.py           # Main scraper logic
-│   │   └── scraper_links.py          # Link extraction for scraper
+│   │   ├── scraper_utils.py
+│   │   ├── main.py
+│   │   ├── scraper_articles.py
+│   │   ├── scraper_images.py
+│   │   └── scraper_links.py
 │   ├── nytimes/
-│   │   ├── article_fetcher.py        # Fetch articles from NYTimes
-│   │   ├── config.py                 # API keys and settings
-│   │   ├── main.py                   # Entry point for NYTimes scraper
-│   │   ├── nyt_api.py                # API wrapper for NYTimes
-│   │   └── rate_limiter.py           # Handles API rate limiting
-│   ├── landmark_preprocessing/
-│   │   ├── run_xgb_landmark.py       # XGBoost landmark classifier runner
-│   │   ├── data_loader.py            # Load and preprocess landmark data
-│   │   ├── feature_engineering.py    # Extract features from landmarks
-│   │   ├── image_processing.py       # Image pre-processing utilities
-│   │   ├── landmarks_utils.py        # Landmark-specific helper functions
-│   │   ├── main.py                   # Landmark preprocessing pipeline entry
-│   │   ├── models.py                 # Landmark-based model definitions
-│   │   ├── train.py                  # Training scripts for models
-│   │   └── utils.py                  # General utilities
+│   │   ├── article_fetcher.py
+│   │   ├── config.py
+│   │   ├── main.py
+│   │   ├── nyt_api.py
+│   │   └── rate_limiter.py
+│   ├── landmark_based/
+│   │   ├── run_xgb_landmark.py
+│   │   ├── data_loader.py
+│   │   ├── feature_engineering.py
+│   │   ├── image_processing.py
+│   │   ├── landmark_utils.py
+│   │   ├── main.py
+│   │   ├── models.py
+│   │   ├── train.py
+│   │   └── utils.py
 │   ├── pixel_based/
-│   │   ├── bregnext_loader.py        # Loader for BRegNext model
-│   │   ├── data_loader.py            # Load pixel-based image data
-│   │   ├── emotion_model_loader.py   # Load emotion classification model
-│   │   ├── main_pipeline.py          # Main pixel-based processing pipeline
-│   │   ├── model_runner.py           # Run pixel-based models
-│   │   ├── pretrained_bregnext_loader.py  # Load pretrained BRegNext weights
-│   │   └── transforms.py             # Image transforms and augmentations
-│   ├── text_emotions_classifier.py   # Text-based emotion classification script
-│   └── softmax_agg_predictions.py    # Softmax aggregation of predictions
+│   │   ├── bregnext_model_loader.py
+│   │   ├── data_loader.py
+│   │   ├── emotion_models_loader.py
+│   │   ├── main.py
+│   │   ├── model_runner.py
+│   │   └── transforms.py
+│   ├── text_emotions_classifier.py
+│   └── softmax_agg_predictions.py
 └── manuscript/
     └── Finding_Emotions_in_Faces_A_Meta_Classifier.pdf
-
 ```
+
+---
+
+## Pipeline Overview
+
+```text
+Article/Image Collection
+        ↓
+Text Emotion Model          Face Detection
+        ↓                         ↓
+Text Emotion Scores          Pixel CNN + Landmark XGBoost
+        ↓                         ↓
+                Softmax Aggregation
+                         ↓
+               Final Emotion Prediction
+```
+
+### 1. Data collection
+
+Optional scraping scripts collect articles, article metadata, and images from supported news sources.
+
+### 2. Landmark pipeline
+
+The landmark pipeline uses facial landmark coordinates to engineer geometry-based features, including distances and angles between facial points. These features are used to train classical ML classifiers, including XGBoost.
+
+### 3. Pixel-based pipeline
+
+The pixel pipeline uses cropped face images and CNN-based models to estimate emotion probabilities directly from image pixels.
+
+### 4. Text-emotion pipeline
+
+The text pipeline applies a pretrained transformer/VAD-style model to article text and maps text signals into emotion categories.
+
+### 5. Aggregation
+
+The aggregation step combines model probability outputs and produces a final emotion prediction.
 
 ---
 
 ## Requirements
 
-You can install dependencies using:
+Dependencies are split by pipeline so users can install only what they need.
+
+### Base utilities
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements/base.txt
 ```
-- TensorFlow 1.x compatibility is required
-- Checkpoint files are external
-- Operation names are model-specific
+
+### Landmark pipeline
+
+```bash
+pip install -r requirements/landmark.txt
+```
+
+### Scraping pipeline
+
+```bash
+pip install -r requirements/scraping.txt
+```
+
+### Text-emotion pipeline
+
+```bash
+pip install -r requirements/text.txt
+```
+
+### Development and smoke tests
+
+```bash
+pip install -r requirements/dev.txt
+pytest -q
+```
+
+### Pixel-based pipeline
+
+The pixel-based pipeline depends on external checkpoints and may require a separate environment because it uses TensorFlow compatibility-mode graph loading, PyTorch models, MTCNN, and custom model definitions.
+
+```bash
+pip install -r requirements/pixel.txt
+```
+
+Alternatively:
+
+```bash
+conda env create -f requirements/pixel_environment.yml
+conda activate emotion-pixel
+```
+
+---
+
+## External Files Required
+
+The following files are not included in this repository:
+
+- AffectNet dataset
+- BReG-NeXt TensorFlow checkpoint
+- AffectNet PyTorch checkpoint
+- SongFan checkpoint and model definition
+- Large generated output files
+
+These files are excluded because of dataset licensing, storage size, and checkpoint distribution constraints.
 
 ---
 
 ## Data Availability
 
-The original dataset (e.g., AffectNet) is not included in this repository due to size and licensing restrictions. Please request access from the official source:
+The original AffectNet dataset is not included due to size and licensing restrictions. Access should be requested from the official dataset provider.
 
-👉 [http://mohammadmahoor.com/affectnet/](http://mohammadmahoor.com/affectnet/)
-
-Output results were not stored due to storage constraints. Once the dataset is downloaded and placed into the appropriate folders, you can re-run the pipeline to reproduce the results.
-
-## Outputs
-
-- `outputs/`: CSV files with model predictions and probabilities
-- `models/`: Serialized trained models (.joblib)
+Generated outputs are also excluded from the repository. Once the required data and checkpoints are available, the scripts can be rerun to regenerate model outputs.
 
 ---
 
 ## How to Use
 
-Run training with default settings (expects data in `data/` folder):
+### 1. Landmark-based emotion classification
 
-```bash
-python scripts/landmark_preprocessing/main.py
-```
-To specify a custom data directory:
-```bash
-python scripts/landmark_preprocessing/main.py --data_dir /path/to/data
-
-```
-To run specific feature files:
-```bash
-python scripts/landmark_preprocessing/main.py --feature_files new_features.csv
-```
-
-1. Facial Landmark Emotion Classification
-Use handcrafted features (e.g., inter-point distances, center distances) to classify facial emotions:
+Train and compare landmark-based classifiers:
 
 ```bash
 python scripts/landmark_preprocessing/main.py \
   --data_dir data \
-  --feature_files new_features.csv \
-  --output_dir outputs
+  --feature_files new_features.csv
 ```
 
-To run only the XGBoost classifier:
+Run XGBoost prediction on new feature data:
 
 ```bash
-python run_xgb_landmark.py
-Input: Precomputed .csv files of features
+python scripts/landmark_preprocessing/run_xgb_landmark.py \
+  --model_path models/best_model_XGBoost_Crafted_Features.joblib \
+  --data_path data/new_features.csv \
+  --output_path outputs/xgb_predictions.csv
 ```
 
-Output: CSV of predictions with class probabilities
+### 2. Pixel-based emotion classification
 
-2. Pixel-Based Emotion Classification
-Use BRegNext or other CNN models to classify emotions directly from facial images:
-
-Pretrained models are not included.
-
-Provide paths via CLI:
-
-python main_pipeline.py \
-  --affectnet_ckpt path/to/affectnet.pth \
-  --songfan_ckpt path/to/songfan.pth \
-  --image_dir path/to/images
+Run pixel-based inference:
 
 ```bash
 python scripts/pixel_based/main.py \
-  --image_dir data/images/ \
-  --bregnext_ckpt checkpoints/categorical_attempt_3/ \
-  --affectnet_ckpt models/affectnet.pth \
-  --songfan_ckpt models/songfan.pth \
-  --example_dir examplespth \
-  --songfan_ckpt models/songfan.pth
+  --image_dir data/images \
+  --bregnext_ckpt checkpoints/bregnext \
+  --affectnet_ckpt checkpoints/affectnet.pth \
+  --songfan_ckpt checkpoints/songfan.pth \
+  --example_dir examples
 ```
-Input: Folder of cropped face images
-Output: CSV with emotion predictions and softmax probabilities
 
-3. Text-Based Emotion Classification
-Classify emotions from text content (e.g., from news or dialogue):
+### 3. Text-based emotion classification
+
+Classify article text into emotion categories:
 
 ```bash
-python text_emotions_classifier.py \
+python scripts/text_emotions_classifier.py \
   --input_csv data/articles.csv \
   --output_csv outputs/articles_with_emotions.csv \
   --text_column article_text \
@@ -224,8 +340,9 @@ python text_emotions_classifier.py \
   --batch_size 16
 ```
 
-4. Web Article Scraping (Optional)
-Scrape from New York Post:
+### 4. Article scraping
+
+Scrape New York Post articles:
 
 ```bash
 python scripts/nypost/main.py \
@@ -234,7 +351,7 @@ python scripts/nypost/main.py \
   --output_dir data/nypost
 ```
 
-Scrape from New York Times:
+Scrape New York Times articles:
 
 ```bash
 python scripts/nytimes/main.py \
@@ -242,33 +359,168 @@ python scripts/nytimes/main.py \
   --end_date 2022-03-01 \
   --output_dir outputs/nyt
 ```
-Note: Add your NYTimes API key to config.py
 
-5. Aggregating Predictions
-Merge outputs from text, landmark, and image pipelines using a softmax-weighted strategy:
+For NYTimes scraping, set the API key as an environment variable:
 
 ```bash
-python scripts/python softmax_agg_predictions.py \
+export NYT_API_KEY="your_api_key_here"
+```
+
+### 5. Aggregate predictions
+
+Combine XGBoost and deep-learning probability outputs:
+
+```bash
+python scripts/softmax_agg_predictions.py \
   --xgb_input outputs/xgb_predictions.csv \
   --dl_input outputs/bregnext_predictions.csv \
   --output_csv outputs/combined_predictions.csv
 ```
 
-Input: Softmax probability CSVs from each model
-Output: Final aggregated emotion prediction
+---
 
+## Run with Sample Data
+
+This repository includes small synthetic CSV files in `sample_data/` so reviewers can test the project structure without downloading AffectNet or external model checkpoints.
+
+### Run landmark training with sample data
+
+```bash
+python scripts/landmark_preprocessing/main.py \
+  --data_dir sample_data \
+  --feature_files landmark_features_sample.csv
+```
+
+### Run softmax aggregation with sample data
+
+```bash
+python scripts/softmax_agg_predictions.py \
+  --xgb_input sample_data/xgb_predictions_sample.csv \
+  --dl_input sample_data/bregnext_predictions_sample.csv \
+  --output_csv outputs/combined_sample_predictions.csv
+```
+
+Sample CSVs are synthetic and used only for smoke testing. Reported model results come from the full AffectNet-based experiment described in the manuscript.
 
 ---
 
-## Notes
+## Smoke Tests
 
-Make sure to update path variables in the scripts to match your directory structure.
+This repository includes lightweight smoke tests to verify:
+
+- sample data schemas
+- prediction aggregation logic
+- key module imports
+
+Run:
+
+```bash
+pytest -q
+```
+
+These tests are not full model-validation tests. They are intended to confirm that the repository structure and sample pipeline are functional.
+
+---
+
+## Output Files
+
+Typical generated outputs include:
+
+```text
+outputs/
+├── xgb_predictions.csv
+├── bregnext_predictions.csv
+├── combined_predictions.csv
+├── articles_with_emotions.csv
+└── evaluation/
+    ├── classification_report.csv
+    ├── confusion_matrix.png
+    └── model_comparison.csv
+```
+
+### Prediction CSV schema
+
+Prediction files should use probability columns with the `prob_` prefix:
+
+```text
+prob_Neutral
+prob_Happy
+prob_Sad
+prob_Surprise
+prob_Fear
+prob_Disgust
+prob_Anger
+prob_Contempt
+```
+
+This keeps aggregation scripts stable and avoids relying on column positions.
+
+---
+
+## Evaluation Notes
+
+The original experiment used a balanced AffectNet subset and reported:
+
+- landmark model accuracy and F1
+- pixel model accuracy
+- combined meta-classifier accuracy and F1
+- confusion matrices by emotion class
+- entropy/confidence analysis
+- Cohen’s kappa comparing agreement between landmark and pixel models
+
+The current repository is designed to organize and reproduce this workflow when external data and checkpoints are available.
+
+---
+
+## Limitations
+
+- AffectNet is not included due to licensing and storage restrictions.
+- Model checkpoints are not included.
+- The pixel-based pipeline depends on legacy TensorFlow compatibility and external model definitions.
+- Text-emotion scoring is exploratory and may use heuristic mapping from VAD-style scores to emotion categories.
+- Facial emotion recognition estimates visible expression signals, not true internal emotional state.
+- The reported results come from the accompanying manuscript and require full-data reproduction.
+- Cross-dataset validation is not included.
+- Web scraping can break if source-page HTML changes.
+- Errors in face detection or landmark extraction can degrade downstream predictions.
+
+---
+
+## Ethical Use
+
+Emotion recognition should be used carefully. This project should not be used for:
+
+- high-stakes decisions about individuals
+- medical or psychological diagnosis
+- surveillance or identity-based profiling
+- claims about a person’s true internal feelings
+
+The intended use is educational and analytical: comparing modeling approaches and exploring aggregate emotional signals in media content.
+
+---
+
+## Key Learnings
+
+- Similar standalone model accuracy does not mean models make the same errors.
+- Combining models can improve performance when their errors are complementary.
+- Engineered facial geometry features are interpretable but limited.
+- Pixel-based CNN models capture richer signals but are harder to reproduce and explain.
+- Confidence/entropy can help identify less reliable predictions.
+- Reproducibility requires clear data assumptions, external-file documentation, sample data, and tests.
+
+---
+
+## Acknowledgement
+
+This project builds on prior collaborative work. I acknowledge guidance and contributions from:
+
+- Dr. Siddhartha Dalal
+- Dr. Michael Lesk
+- Wesley Yuan
+- Vikki Sui
 
 ---
 
 ## License
 
 This project is for research and educational purposes.
-
----
-

@@ -42,11 +42,9 @@ def main():
     print(f"Loading new dataset from: {data_path}")
     df_new = pd.read_csv(data_path)
 
-    # Drop label column if present
-    if df_new.columns[0].lower() in ['label', 'emotion', 'class']:
-        X_new = df_new.iloc[:, 1:]
-    else:
-        X_new = df_new
+    # Drop non-feature columns if present
+    drop_cols = [c for c in ['target', 'label', 'emotion', 'class', 'img_path'] if c in df_new.columns]
+    X_new = df_new.drop(columns=drop_cols, errors='ignore')
 
     # ==== PREDICT ====
     print("Predicting labels and probabilities...")

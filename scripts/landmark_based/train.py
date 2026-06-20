@@ -31,7 +31,7 @@ def run_classifiers(df, dataset_name, classifiers):
         print(f"{name} Accuracy: {acc:.4f}")
         print(f"{name} Macro F1: {f1:.4f}")
         print("Classification Report:")
-        print(classification_report(y_test, y_pred))
+        print(classification_report(y_test, y_pred, zero_division=0))
 
         # Probabilities (if available)
         if hasattr(model, "predict_proba"):

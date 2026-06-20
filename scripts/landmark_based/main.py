@@ -1,38 +1,34 @@
-import os
 import argparse
+import os
 
 from data_loader import load_features
 from models import get_classifiers
 from train import run_classifiers
 from utils import save_model
 
-
 DEFAULT_FEATURE_FILES = {
     "Crafted Features": "new_features.csv",
-    # Uncomment only if you are actually keeping these feature sets
-    # "Inter Distance Features": "inter_dist.csv",
-    # "Center Distance Features": "center_dist.csv",
 }
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Train and compare landmark-based emotion classifiers."
-    )
+    parser = argparse.ArgumentParser(description="Train and compare landmark-based emotion classifiers.")
     parser.add_argument(
         "--data_dir",
         type=str,
         default=None,
-        help="Directory containing processed feature CSV files. Defaults to <repo>/data"
+        help="Directory containing processed feature CSV files. Defaults to <repo>/data",
     )
     parser.add_argument(
         "--feature_files",
         nargs="*",
         default=None,
-        help=(
-            "Optional list of feature CSV filenames to use, e.g. "
-            "--feature_files new_features.csv inter_dist.csv"
-        )
+        help="Optional feature CSV filenames, e.g. --feature_files new_features.csv",
+    )
+    parser.add_argument(
+        "--quick_smoke",
+        action="store_true",
+        help="Run only a lightweight classifier for repository smoke testing.",
     )
     return parser.parse_args()
 
@@ -44,8 +40,7 @@ def resolve_repo_root():
 def resolve_data_dir(user_data_dir=None):
     if user_data_dir:
         return user_data_dir
-    repo_root = resolve_repo_root()
-    return os.path.join(repo_root, "data")
+    return os.path.join(resolve_repo_root(), "data")
 
 
 def build_feature_map(feature_files):
@@ -65,15 +60,16 @@ def main():
     if not os.path.isdir(data_dir):
         raise FileNotFoundError(
             f"Data directory not found: {data_dir}\n"
-            "Create the directory and place your processed CSV feature files there."
+            "Create the directory and place processed CSV feature files there."
         )
 
     classifiers = get_classifiers()
+    if args.quick_smoke:
+        classifiers = {"Naive_Bayes": classifiers["Naive_Bayes"]}
     all_results = []
 
     for dataset_name, filename in feature_map.items():
         file_path = os.path.join(data_dir, filename)
-
         if not os.path.exists(file_path):
             print(f"Skipping {dataset_name}: file not found at {file_path}")
             continue
@@ -83,17 +79,10 @@ def main():
         all_results += run_classifiers(df, dataset_name, classifiers)
 
     if not all_results:
-        raise ValueError(
-            "No feature files were loaded. Check your data directory and filenames."
-        )
+        raise ValueError("No feature files were loaded. Check your data directory and filenames.")
 
-    best = max(all_results, key=lambda x: x[1])
-    best_name, best_score, best_dataset, best_model = best
-
-    print(
-        f"\nBest Model: {best_name} on {best_dataset} "
-        f"with Macro F1: {best_score:.4f}"
-    )
+    best_name, best_score, best_dataset, best_model = max(all_results, key=lambda x: x[1])
+    print(f"\nBest Model: {best_name} on {best_dataset} with Macro F1: {best_score:.4f}")
     save_model(best_model, best_name, best_dataset)
 
 

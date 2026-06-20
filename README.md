@@ -300,7 +300,7 @@ Generated outputs are also excluded from the repository. Once the required data 
 Train and compare landmark-based classifiers:
 
 ```bash
-python scripts/landmark_preprocessing/main.py \
+python scripts/landmark_based/main.py \
   --data_dir data \
   --feature_files new_features.csv
 ```
@@ -308,7 +308,7 @@ python scripts/landmark_preprocessing/main.py \
 Run XGBoost prediction on new feature data:
 
 ```bash
-python scripts/landmark_preprocessing/run_xgb_landmark.py \
+python scripts/landmark_based/run_xgb_landmark.py \
   --model_path models/best_model_XGBoost_Crafted_Features.joblib \
   --data_path data/new_features.csv \
   --output_path outputs/xgb_predictions.csv
@@ -386,7 +386,8 @@ This repository includes small synthetic CSV files in `sample_data/` so reviewer
 ### Run landmark training with sample data
 
 ```bash
-python scripts/landmark_preprocessing/main.py \
+python scripts/landmark_based/main.py \
+  --quick_smoke \
   --data_dir sample_data \
   --feature_files landmark_features_sample.csv
 ```
@@ -524,3 +525,17 @@ This project builds on prior collaborative work. I acknowledge guidance and cont
 ## License
 
 This project is for research and educational purposes.
+
+
+## Repository Smoke-Test Status
+
+The repository includes lightweight sample data and tests so reviewers can validate structure without external datasets or checkpoints. Recommended final checks:
+
+```bash
+python -m compileall -q scripts tests
+pytest -q
+python scripts/landmark_based/main.py --quick_smoke --data_dir sample_data --feature_files landmark_features_sample.csv
+python scripts/softmax_agg_predictions.py --xgb_input sample_data/xgb_predictions_sample.csv --dl_input sample_data/bregnext_predictions_sample.csv --output_csv outputs/combined_sample_predictions.csv
+```
+
+The pixel-based pipeline and full text-emotion model require optional dependencies and external checkpoints/models, so they are documented but not included in the default smoke tests.

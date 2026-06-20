@@ -1,51 +1,51 @@
-import requests
-import pandas as pd
-from rate_limiter import rate_limit
-from config import BASE_URL_TEMPLATE
 import logging
+
+import pandas as pd
+
+from config import API_KEY, BASE_URL_TEMPLATE
+from rate_limiter import rate_limit
 
 
 def get_archive_data(session, year, month, current_queries):
-    """
-    Request archive data for a given month and year from NYT API.
+    """Request NYT archive data for a given month/year."""
+    if not API_KEY:
+        raise ValueError("Missing NYT_API_KEY environment variable")
 
-    Args:
-        month (int): Month number (1-12).
-        year (int): Year number (e.g. 2019).
-        current_queries (int): Number of queries already performed.
-
-    Returns:
-        tuple: (pandas.DataFrame with article metadata, updated query count)
-    """
-    url = BASE_URL_TEMPLATE.format(year=year, month=month)
+    url = BASE_URL_TEMPLATE.format(year=year, month=month, api_key=API_KEY)
     current_queries = rate_limit(current_queries)
 
     logging.info(f"Requesting archive data for {month}/{year}...")
-    response = session.get(url)
+    response = session.get(url, timeout=20)
     response.raise_for_status()
     current_queries += 1
 
     data = response.json()
-    docs = data['response']['docs']
-    
+    docs = data.get("response", {}).get("docs", [])
     df = pd.DataFrame(docs)
-    df['pub_date'] = pd.to_datetime(df['pub_date']).dt.date
-    df['main_headline'] = df['headline'].apply(lambda h: h.get('main', '').lower())
-    df['list_keywords'] = df['keywords'].apply(lambda kws: [kw['value'].lower() for kw in kws])
+    if df.empty:
+        return df, current_queries
+
+    df["pub_date"] = pd.to_datetime(df["pub_date"], errors="coerce").dt.date
+    df["main_headline"] = df["headline"].apply(
+        lambda h: h.get("main", "").lower() if isinstance(h, dict) else ""
+    )
+    df["list_keywords"] = df["keywords"].apply(
+        lambda kws: [kw.get("value", "").lower() for kw in kws] if isinstance(kws, list) else []
+    )
     return df, current_queries
 
+
 def filter_articles(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Filter articles to keep only News type, with print section, and specific sections.
+    """Filter NYT archive metadata to news articles in selected sections."""
+    if df.empty:
+        return df
 
-    Args:
-        df (pd.DataFrame): DataFrame with NYT article metadata.
+    required_cols = ["type_of_material", "print_section", "section_name"]
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required NYT metadata columns: {missing}")
 
-    Returns:
-        pd.DataFrame: Filtered DataFrame.
-    """
-    is_news = df['type_of_material'] == 'News'
-    has_print = df['print_section'].notna()
-    in_sections = df['section_name'].isin(['World', 'U.S.'])
-    filtered = df[is_news & has_print & in_sections].reset_index(drop=True)
-    return filtered
+    is_news = df["type_of_material"] == "News"
+    has_print = df["print_section"].notna()
+    in_sections = df["section_name"].isin(["World", "U.S."])
+    return df[is_news & has_print & in_sections].reset_index(drop=True)

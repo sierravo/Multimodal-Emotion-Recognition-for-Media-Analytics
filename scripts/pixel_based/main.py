@@ -1,12 +1,7 @@
 """
-main.py
+Run pixel-based emotion recognition on a directory of images.
 
-Main script to orchestrate image-based emotion recognition using three different models:
-- BReG-NeXt (TensorFlow)
-- AffectNet AlexNet (PyTorch)
-- SongFan EMO6Classifier (PyTorch)
-
-This pipeline loads example images, detects faces, and runs inference across all models.
+This pipeline requires external checkpoints and model definitions.
 """
 
 import argparse
@@ -20,36 +15,11 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Run pixel-based emotion recognition on a directory of images."
     )
-    parser.add_argument(
-        "--image_dir",
-        type=str,
-        required=True,
-        help="Directory containing input .jpg images"
-    )
-    parser.add_argument(
-        "--bregnext_ckpt",
-        type=str,
-        required=True,
-        help="Path to BReG-NeXt checkpoint directory"
-    )
-    parser.add_argument(
-        "--affectnet_ckpt",
-        type=str,
-        required=True,
-        help="Path to AffectNet checkpoint file"
-    )
-    parser.add_argument(
-        "--songfan_ckpt",
-        type=str,
-        required=True,
-        help="Path to SongFan checkpoint file"
-    )
-    parser.add_argument(
-        "--example_dir",
-        type=str,
-        default="examples",
-        help="Directory for saving example outputs"
-    )
+    parser.add_argument("--image_dir", type=str, required=True, help="Directory containing input images")
+    parser.add_argument("--bregnext_ckpt", type=str, required=True, help="Path to BReG-NeXt checkpoint directory")
+    parser.add_argument("--affectnet_ckpt", type=str, required=True, help="Path to AffectNet checkpoint file")
+    parser.add_argument("--songfan_ckpt", type=str, required=True, help="Path to SongFan checkpoint file")
+    parser.add_argument("--example_dir", type=str, default="examples", help="Directory for example outputs")
     return parser.parse_args()
 
 
@@ -60,7 +30,6 @@ def main():
         raise ValueError(f"Invalid image directory: {args.image_dir}")
 
     dl = DataLoader(images_path=args.image_dir, save_examples_dir=args.example_dir)
-
     runner = ModelRunner(
         bregnext_ckpt=args.bregnext_ckpt,
         affectnet_ckpt=args.affectnet_ckpt,
@@ -70,7 +39,6 @@ def main():
 
     for i, img_path in enumerate(dl.images):
         print(f"\nProcessing image {i}: {img_path}")
-
         new_img = dl.get_new_image(i, img_path=img_path)
         img_faces = dl.find_faces(i, new_img)
 
@@ -79,23 +47,8 @@ def main():
             continue
 
         results = runner.run_all(new_img, img_faces, i)
-
-        print("\nBReG-NeXt:")
-        print(results["bregnext"], results["bregnext"].idxmax(axis=1))
-
-        print("\nAffectNet:")
-        print(
-            results["affectnet"],
-            results["affectnet"].idxmax(axis=1),
-            results["affectnet_meta"]
-        )
-
-        print("\nSongFan:")
-        print(
-            results["songfan"],
-            results["songfan"].idxmax(axis=1),
-            results["songfan_meta"]
-        )
+        for name, value in results.items():
+            print(f"\n{name}:\n{value}")
 
 
 if __name__ == "__main__":

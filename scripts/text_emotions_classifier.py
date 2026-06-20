@@ -70,7 +70,8 @@ def process_csv(input_csv_path, output_csv_path, text_column="article_text", nam
         )
 
     texts = df[text_column].fillna("").astype(str).tolist()
-    names = df[name_column]
+    if name_column is not None and name_column not in df.columns:
+        print(f"Optional name column '{name_column}' not found; continuing without it.")
 
     all_vad = []
 
@@ -99,6 +100,10 @@ def process_csv(input_csv_path, output_csv_path, text_column="article_text", nam
     result_df["emotion_category_id"] = categories
     result_df["emotion_category_name"] = category_names
 
+    import os
+    out_dir = os.path.dirname(output_csv_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     result_df.to_csv(output_csv_path, index=False)
     print(f"Saved to {output_csv_path}")
 

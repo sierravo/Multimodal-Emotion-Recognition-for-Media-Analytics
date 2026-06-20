@@ -1,19 +1,11 @@
 import time
+
 from config import MAX_QUERIES, QUERY_DELAY
 
-def rate_limit(current_queries, MAX_QUERIES, QUERY_DELAY):
-    """
-    Enforce query rate limits by sleeping and checking maximum allowed queries by the NY Times.
 
-    Args:
-        current_count (int): Current number of queries made.
-    Raises:
-        RuntimeError: If max queries would be exceeded.
-
-    Returns:
-        int: Updated number of queries after this request.
-    """
-    if current_queries >= MAX_QUERIES:
-        raise RuntimeError('Maximum queries per day reached. Sleeping...')
-    time.sleep(QUERY_DELAY)
+def rate_limit(current_queries, max_queries=MAX_QUERIES, query_delay=QUERY_DELAY):
+    """Sleep between API/web requests and enforce a max query count."""
+    if current_queries >= max_queries:
+        raise RuntimeError("Maximum query limit reached.")
+    time.sleep(query_delay)
     return current_queries
